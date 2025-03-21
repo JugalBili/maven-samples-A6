@@ -1,0 +1,73 @@
+pipeline {
+  agent any
+
+  environment {
+    LATEST_SUCCESS_FILE = "${WORKSPACE}/latest_success_hash.txt"
+  }
+
+  stages {
+    stage('check out') {
+      steps {
+        git(url: 'https://github.com/JugalBili/maven-samples-A6.git', branch: 'master')
+      }
+    }
+
+    stage('verify') {
+      steps {
+        catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+          sh """
+            #!/bin/bash
+            set +e   # Disable 'exit immediately on error'
+
+            CURRENT_COMMIT=\$(git rev-parse HEAD)
+
+            mvn verify
+            RESULT=\$?
+
+            if [ "\$RESULT" -eq 0 ]; then
+              # Build succeeded, update latest success hash
+              echo "\$CURRENT_COMMIT" > "\$LATEST_SUCCESS_FILE"
+              echo "Build succeeded. Updated latest_success_hash to \$CURRENT_COMMIT"
+            else
+                echo "Build failed. Not updating latest_success_hash."
+            fi
+
+            exit \$RESULT
+          """
+        }
+      }
+    }
+
+    stage('Run Tests') {
+      steps {
+        sh """
+          # Get the current commit hash
+          CURRENT_COMMIT=\$(git rev-parse HEAD)
+
+          # Load the latest success hash if exists
+          if [ -f "\$LATEST_SUCCESS_FILE" ]; then
+            LATEST_SUCCESS_HASH=\$(cat "\$LATEST_SUCCESS_FILE")
+          else
+            LATEST_SUCCESS_HASH=""
+          fi
+          echo "Latest Successful Commit: \$LATEST_SUCCESS_HASH"
+
+          # Run Git Bisect if hashes don't match and latest_success_hash exists
+          if [ -n "\$LATEST_SUCCESS_HASH" ] && [ "\$LATEST_SUCCESS_HASH" != "\$CURRENT_COMMIT" ]; then
+            echo "Running Git Bisect to find the first bad commit..."
+            git bisect start "\$CURRENT_COMMIT" "\$LATEST_SUCCESS_HASH"
+            git bisect run mvn verify
+            git bisect reset
+          else
+            echo "No need to run Git Bisect."
+          fi
+        """
+      }
+    }
+
+  }
+  tools {
+    maven 'A6_MVN'
+    jdk 'A6_JDK'
+  }
+}
