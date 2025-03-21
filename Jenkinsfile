@@ -21,7 +21,7 @@ pipeline {
 
             CURRENT_COMMIT=\$(git rev-parse HEAD)
 
-            mvn verify
+            mvn clean verify
             RESULT=\$?
 
             if [ "\$RESULT" -eq 0 ]; then
@@ -80,7 +80,7 @@ pipeline {
             if [ -n "\$LATEST_SUCCESS_HASH" ] && [ "\$LATEST_SUCCESS_HASH" != "\$CURRENT_COMMIT" ]; then
               echo "Running Git Bisect to find the first bad commit..."
               git bisect start "\$CURRENT_COMMIT" "\$LATEST_SUCCESS_HASH"
-              git bisect run mvn verify
+              git bisect run mvn clean verify
               git bisect reset
             else
               echo "No need to run Git Bisect."
